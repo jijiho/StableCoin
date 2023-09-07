@@ -27,9 +27,8 @@ pragma solidity 0.8.19;
 import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AggregatorV3Interface} from "@chainlink/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-@chainlink/contracts/ = lib/chainlink-brownie-contracts/contracts/
 /*
 * @title MOKEngine
 * @auther Jang Jiho
@@ -56,7 +55,7 @@ contract MOKEngine is ReentrancyGuard {
     error MOKEngine__NotAllowedToken();
     error MOKEngine__TransferFailed();
     error MOKEngine__BreaksHealthFactor(uint256 healthFactor);
-
+    error MOKEngine__MintFailed();
     /////////////////////////
     //  State Variable    //
     ///////////////////////
@@ -149,6 +148,10 @@ contract MOKEngine is ReentrancyGuard {
     {
         s_MOKMinted[msg.sender] += amountMokToMint;
         _revertItHealthFactorisBroken(msg.sender);
+        bool minted = i_mok.mint(msg.sender, amountMokToMint);
+        if(!minted){
+            revert MOKEngine__MintFailed();
+        }
     }
 
     function burnMok() external {}

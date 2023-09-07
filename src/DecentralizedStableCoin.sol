@@ -42,9 +42,11 @@ contract DecentralizedStableCoin is ERC20Burnable, Ownable {
     error DecentralizedStableCoin__MustBeMoreThanZero(); //_amount가 0보다 크지 않으면 에러 발생 
     error DecentralizedStableCoin__BurnAmountExceedsBalance(); //태우려는 _amount가 balance(계좌 총액)보다 크면 에러 발생
     error DecentralizedStableCoin__NotZeroAddress();
-    constructor() ERC20("MokToken", "MOK") {}
-    function burn(uint256 _amount) public override onlyOwner { //MOk을 주고 담보물을 받아갈 때 MOK을 burn
-        uint256 balance = balanceOf(msg.sender);
+    constructor() ERC20("MokToken", "MOK") {}//ERC20표쥰에 따라서 토큰 생성 토큰 이름 MokToken, 심볼명 MOK
+
+    //MOk을 주고 담보물을 받아갈 때 MOK을 소각하는 함수
+    function burn(uint256 _amount) public override onlyOwner { // onlyOwner 소유자만 burn 함수를 호출할 수 있음
+        uint256 balance = balanceOf(msg.sender); //balance는 현재 컨트랙트를 호출한 주소가 가진 잔고
         if(_amount<=0){
             revert DecentralizedStableCoin__MustBeMoreThanZero();
         }

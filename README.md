@@ -6,4 +6,4 @@
 3. Collateral: Exogenous (Cryto)
  1. wETH
  2. wBTC
- 3. wXRP
+ 3. //wXRP
