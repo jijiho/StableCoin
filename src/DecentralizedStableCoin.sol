@@ -47,10 +47,10 @@ contract DecentralizedStableCoin is ERC20Burnable, Ownable {
     //MOk을 주고 담보물을 받아갈 때 MOK을 소각하는 함수
     function burn(uint256 _amount) public override onlyOwner { // onlyOwner 소유자만 burn 함수를 호출할 수 있음
         uint256 balance = balanceOf(msg.sender); //balance는 현재 컨트랙트를 호출한 주소가 가진 잔고
-        if(_amount<=0){
+        if(_amount<=0){//소각하려는 양이 0보다 작거나 같으면 오류발생
             revert DecentralizedStableCoin__MustBeMoreThanZero();
         }
-        if(balance < _amount){
+        if(balance < _amount){//소각하려는 양이 잔고보다 
             revert DecentralizedStableCoin__BurnAmountExceedsBalance();
         }
         super.burn(_amount);

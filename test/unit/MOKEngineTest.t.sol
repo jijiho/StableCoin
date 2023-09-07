@@ -31,9 +31,8 @@ contract MOKEngineTest is Test{
 
         uint256 expectedUsd = 30000e18;
         uint256 actualUsd = _moke.getUsdValue(_weth, ethAmount);
-        console.logUint(expectedUsd);
-        console.logUint(actualUsd);
 
-        //assertEq(expectedUsd, actualUsd);
+
+        assertEq(expectedUsd, actualUsd);
     }
 }
