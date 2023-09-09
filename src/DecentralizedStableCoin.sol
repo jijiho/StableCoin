@@ -41,7 +41,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract DecentralizedStableCoin is ERC20Burnable, Ownable {
     error DecentralizedStableCoin__MustBeMoreThanZero(); //_amount가 0보다 크지 않으면 에러 발생 
     error DecentralizedStableCoin__BurnAmountExceedsBalance(); //태우려는 _amount가 balance(계좌 총액)보다 크면 에러 발생
-    error DecentralizedStableCoin__NotZeroAddress();
+    error DecentralizedStableCoin__NotZeroAddress();ㅓㄱ 
     constructor() ERC20("MokToken", "MOK") {}//ERC20표쥰에 따라서 토큰 생성 토큰 이름 MokToken, 심볼명 MOK
 
     //MOk을 주고 담보물을 받아갈 때 MOK을 소각하는 함수

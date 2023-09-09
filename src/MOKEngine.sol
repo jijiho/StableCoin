@@ -47,9 +47,15 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
  */
 
 contract MOKEngine is ReentrancyGuard
+/*
+* ReentrancyGuard -> 재진입공격방지 
+* 재진입공격
+* 왜 막아야 하는지
+* 어떻게 막는지
+*/
 {
-    ////////////////
-    //  erros    //
+    ///////////////
+    //  erros   //
     //////////////
     error MOKEngine__NeedsMoreThanZero();
     error MOKEngine__TokenAddressAndPriceFeedAddressMustBeSameLength();
@@ -57,10 +63,12 @@ contract MOKEngine is ReentrancyGuard
     error MOKEngine__TransferFailed();
     error MOKEngine__BreaksHealthFactor(uint256 healthFactor);
     error MOKEngine__MintFailed();
-    /////////////////////////
-    //  State Variable    //
-    ///////////////////////
 
+
+
+    //////////////////////
+    //  State Variable  //
+    //////////////////////
     uint256 private constant _ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant _PRECISION = 1e10;
     uint256 private constant _LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
