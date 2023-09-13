@@ -73,7 +73,7 @@ contract MOKEngine is ReentrancyGuard
     uint256 private constant _PRECISION = 1e10;
     uint256 private constant _LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant _LIQUIDATION_PRECISION = 100;
-    uint256 private constant _MIN_HEALTH_FACTOR = 1;
+    uint256 private constant _MIN_HEALTH_FACTOR = 1; 
 
     mapping(address token => address priceFeed) private _priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount))
@@ -86,54 +86,67 @@ contract MOKEngine is ReentrancyGuard
 
     ////////////////
     //   Events   //
-    ///////////////
+    ////////////////
     event CollateralDeposited(
         address indexed user,
         address indexed token,
         uint256 amount
     );
 
-    ////////////////
+
+    ///////////////
     // Modifiers //
-    //////////////
-    modifier moreThanZero(uint256 amount) {
-        if (amount == 0) {
-            revert MOKEngine__NeedsMoreThanZero();
+    ///////////////
+    modifier moreThanZero(uint256 amount) { //amount가 0보단 커야 함
+        if (amount == 0) { // amount가 0이면 (uint 타입이기 때문에 0보다 작을 수 없음)
+            revert MOKEngine__NeedsMoreThanZero(); //예외 처리 : amount가 0보단 커야 함
         }
         _;
     }
 
-    modifier isAllowedToken(address token) {
-        if (_priceFeeds[token] == address(0)) {
-            revert MOKEngine__NotAllowedToken();
+    modifier isAllowedToken(address token) { // token의 주소가 0주소가 아니어야 함
+        if (_priceFeeds[token] == address(0)) { // _priceFeeds[token] -> token의 가격 정보를 받아올 주소가 0주소이면
+            revert MOKEngine__NotAllowedToken(); //예외 처리 : 주소가 접근 가능한 주소여야 함
         }
         _;
     }
 
-    ////////////////
+    ///////////////
     // Functions //
-    //////////////
+    ///////////////
     constructor(
-        address[] memory tokenAddress,
-        address[] memory priceFeedAddress,
-        address mokAddress
+        address[] memory tokenAddress, //token의 주소를 저장할 배열
+        address[] memory priceFeedAddress, //token의 가격 정보를 받아올 주소를 저장하는 배열
+        address mokAddress //MOK 토큰의 주소
     ) {
         //USD Price Feed
-        if (tokenAddress.length != priceFeedAddress.length) {
-            revert MOKEngine__TokenAddressAndPriceFeedAddressMustBeSameLength();
+        if (tokenAddress.length != priceFeedAddress.length) { //token 주소와 token 가격 정보의 개수가 다르면
+            revert MOKEngine__TokenAddressAndPriceFeedAddressMustBeSameLength(); //예외 처리
         }
 
-        for (uint256 i = 0; i < tokenAddress.length; i++) {
-            _priceFeeds[tokenAddress[i]] = priceFeedAddress[i];
+        for (uint256 i = 0; i < tokenAddress.length; i++) { 
+            _priceFeeds[tokenAddress[i]] = priceFeedAddress[i];  
             _collateralToken.push(tokenAddress[i]);
         }
-        _iMok = DecentralizedStableCoin(mokAddress);
+        _iMok = DecentralizedStableCoin(mokAddress); 
     }
 
     /////////////////////////
     // External Functions //
     ///////////////////////
-    function depositCollateralMintMok() external {}
+
+
+
+    /*
+     * @notice this function will deposit your collateral and minr MOK in one trasaction
+     * @param tokenCollateralAddress The address of the token to deposit as collateral
+     * @param amountCollateral The amount of collateral to deposit
+     * @param amountMokToMint The amount of decentralized stable coin to min
+     */
+    function depositCollateralMintMok(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountMokToMint) external {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintMok(amountMokToMint);
+    }
 
     /*
      * @notice follows CEI
@@ -142,17 +155,15 @@ contract MOKEngine is ReentrancyGuard
      *
      */
     function depositCollateral(
-        address tokenCollateralAddress,
-        uint256 amountCollateral
+        address tokenCollateralAddress, //담보물 token 주소
+        uint256 amountCollateral //담보물 token 양
     )
-        external
-        moreThanZero(amountCollateral)
+        public
+        moreThanZero(amountCollateral) //담보물 양 (amountCollateral)이 0보다 커야함
         isAllowedToken(tokenCollateralAddress)
-        nonReentrant
+        nonReentrant //재진입 공격 방지
     {
-        _collateralDeposited[msg.sender][
-            tokenCollateralAddress
-        ] += amountCollateral;
+        _collateralDeposited[msg.sender][tokenCollateralAddress] += amountCollateral;
         emit CollateralDeposited(
             msg.sender,
             tokenCollateralAddress,
@@ -163,23 +174,31 @@ contract MOKEngine is ReentrancyGuard
             address(this),
             amountCollateral
         );
-        if (!succes) {
+        if (!succes) { 
             revert MOKEngine__TransferFailed();
         }
     }
 
     function redeemCollaternalForMok() external {}
 
-    function redeemCollaternal() external {}
+    /*
+     * in order to redeem collateral:
+     * 1. health factor must be over 1 After collateral pulled
+     * DRY: Dont't repeat yourself
+     */
+    function redeemCollaternal(address tokenCollateralAddress, uint256 amountCollateral) external moreThanZero(amountCollateral) nonReentrant
+    {
+        _collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+    }
 
     /*
      * @notice follows CEI
      * @param amountMokToMint The amount of decentralized stable coin to mint
      * @notice they must have more collateral value than the minimum threshould
      */
-    function mintMok(
-        uint256 amountMokToMint
-    ) external moreThanZero(amountMokToMint) nonReentrant {
+    function mintMok( // mok token mint하는 함수
+        uint256 amountMokToMint // 발행할 mok의 양
+    ) public moreThanZero(amountMokToMint) nonReentrant { // 발행할 MOk의 양은 0보다 커야함, 재진입방지
         _mokMinted[msg.sender] += amountMokToMint;
         _revertItHealthFactorisBroken(msg.sender);
         bool minted = _iMok.mint(msg.sender, amountMokToMint);
