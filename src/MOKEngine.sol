@@ -90,9 +90,13 @@ contract MOKEngine is ReentrancyGuard
     event CollateralDeposited(
         address indexed user,
         address indexed token,
-        uint256 amount
+        uint256 indexed amount
     );
-
+    event CollateralRedeemed(
+        address indexed user,
+        address indexed token,
+        uint256 indexed amount
+    );
 
     ///////////////
     // Modifiers //
@@ -151,8 +155,7 @@ contract MOKEngine is ReentrancyGuard
     /*
      * @notice follows CEI
      * @param tokenCollateralAddress The address of the token to deposit as Collateral
-     * @parma amountCollateral The amount of Collaterla to deposit
-     *
+     * @parma amountCollateral The amount of Collateral to deposit
      */
     function depositCollateral(
         address tokenCollateralAddress, //담보물 token 주소
@@ -179,16 +182,36 @@ contract MOKEngine is ReentrancyGuard
         }
     }
 
-    function redeemCollaternalForMok() external {}
+
+
+    /*
+     * @param tokenCollateralAddress The Collateral address to redeem
+     * @param amountCollateral The amount of collateral to redeem
+     * @parma amountMokToBurn The amount of MOK to burn
+     * This function burns MOK and redeems underlying collateral in one transaction
+     */
+    function redeemCollaternalForMok(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountMokToBurn) external 
+    {
+        burnMok(amountMokToBurn);
+        redeemCollaternal(tokenCollateralAddress, amountCollateral);
+        //redeemCollaternal aleady checks health factor
+    }
 
     /*
      * in order to redeem collateral:
-     * 1. health factor must be over 1 After collateral pulled
+     * 1. Health factor must be over 1 After collateral pulled
      * DRY: Dont't repeat yourself
+     * CEI: Check, Effects, Interactions
      */
-    function redeemCollaternal(address tokenCollateralAddress, uint256 amountCollateral) external moreThanZero(amountCollateral) nonReentrant
+    function redeemCollaternal(address tokenCollateralAddress, uint256 amountCollateral) public moreThanZero(amountCollateral) nonReentrant
     {
         _collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
+        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
+        if(!success){
+            revert MOKEngine__TransferFailed();
+        }
+        _revertItHealthFactorisBroken(msg.sender);
     }
 
     /*
@@ -207,9 +230,24 @@ contract MOKEngine is ReentrancyGuard
         }
     }
 
-    function burnMok() external {}
+    function burnMok(uint256 amount) public moreThanZero(amount){
+        _mokMinted[msg.sender] -= amount;
+        bool success = _iMok.transferFrom(msg.sender, address(this), amount);
+        if (!success){
+            revert MOKEngine__TransferFailed();
+        }
+        _iMok.burn(amount);
+        _revertItHealthFactorisBroken(msg.sender);
+    }
 
-    function liquidate() external {}
+    /*
+     * @param collateral The erc20 collateral address to liquidate from the user
+     * @param user The who has broken the health factor, Thier _healthFactor should be below MIN_HEALTH_FACTOR
+     * @param debtToCover The amount of MOK you want to burn to improve the users health factor
+     * @notice You can partially liquidate a user
+     * @notice You will get a liquidation bonus taking the user funds
+    */
+    function liquidate(address collateral, address uesr, uint256 debtToCover) external {}
 
     function getHealthFactor() external view {}
 
