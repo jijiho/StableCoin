@@ -267,6 +267,7 @@ contract MOKEngine is ReentrancyGuard
         if(endingUserHealthFactor <= startingUserHealthFactor){
             revert MOKEngine__HealthFactorImporved();
         }
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
     function getHealthFactor() external view {}
 
