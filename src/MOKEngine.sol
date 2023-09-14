@@ -63,7 +63,8 @@ contract MOKEngine is ReentrancyGuard
     error MOKEngine__TransferFailed();
     error MOKEngine__BreaksHealthFactor(uint256 healthFactor);
     error MOKEngine__MintFailed();
-
+    error MOKEngine__HealthFactorOk();
+    error MOKEngine__HealthFactorImporved();
 
 
     //////////////////////
@@ -73,7 +74,8 @@ contract MOKEngine is ReentrancyGuard
     uint256 private constant _PRECISION = 1e10;
     uint256 private constant _LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant _LIQUIDATION_PRECISION = 100;
-    uint256 private constant _MIN_HEALTH_FACTOR = 1; 
+    uint256 private constant _MIN_HEALTH_FACTOR = 1e18; 
+    uint256 private constant _LIQUIDATION_BONUS = 10; //10% bonus
 
     mapping(address token => address priceFeed) private _priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount))
@@ -92,10 +94,11 @@ contract MOKEngine is ReentrancyGuard
         address indexed token,
         uint256 indexed amount
     );
-    event CollateralRedeemed(
-        address indexed user,
-        address indexed token,
-        uint256 indexed amount
+    event CollateralRedeemed (
+        address indexed redeemFrom,
+        address indexed redeemTo,
+        address token,
+        uint256 amount
     );
 
     ///////////////
@@ -193,27 +196,25 @@ contract MOKEngine is ReentrancyGuard
     function redeemCollaternalForMok(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountMokToBurn) external 
     {
         burnMok(amountMokToBurn);
-        redeemCollaternal(tokenCollateralAddress, amountCollateral);
-        //redeemCollaternal aleady checks health factor
+        _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
+        //redeemCollateral aleady checks health factor
     }
 
     /*
-     * in order to redeem collateral:
-     * 1. Health factor must be over 1 After collateral pulled
-     * DRY: Dont't repeat yourself
-     * CEI: Check, Effects, Interactions
+     * @param tokenCollateralAddress: The ERC20 token address of the collateral you're redeeming
+     * @param amountCollateral: The amount of collateral you're redeeming
+     * @notice This function will redeem your collateral.
+     * @notice If you have DSC minted, you will not be able to redeem until you burn your DSC
      */
-    function redeemCollaternal(address tokenCollateralAddress, uint256 amountCollateral) public moreThanZero(amountCollateral) nonReentrant
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+        external
+        moreThanZero(amountCollateral)
+        nonReentrant
     {
-        _collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
-        emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
-        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
-        if(!success){
-            revert MOKEngine__TransferFailed();
-        }
-        _revertItHealthFactorisBroken(msg.sender);
+        _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
-
     /*
      * @notice follows CEI
      * @param amountMokToMint The amount of decentralized stable coin to mint
@@ -223,7 +224,7 @@ contract MOKEngine is ReentrancyGuard
         uint256 amountMokToMint // 발행할 mok의 양
     ) public moreThanZero(amountMokToMint) nonReentrant { // 발행할 MOk의 양은 0보다 커야함, 재진입방지
         _mokMinted[msg.sender] += amountMokToMint;
-        _revertItHealthFactorisBroken(msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = _iMok.mint(msg.sender, amountMokToMint);
         if (!minted) {
             revert MOKEngine__MintFailed();
@@ -231,13 +232,8 @@ contract MOKEngine is ReentrancyGuard
     }
 
     function burnMok(uint256 amount) public moreThanZero(amount){
-        _mokMinted[msg.sender] -= amount;
-        bool success = _iMok.transferFrom(msg.sender, address(this), amount);
-        if (!success){
-            revert MOKEngine__TransferFailed();
-        }
-        _iMok.burn(amount);
-        _revertItHealthFactorisBroken(msg.sender);
+        _burnMok(amount, msg.sender, msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
 
     /*
@@ -245,16 +241,60 @@ contract MOKEngine is ReentrancyGuard
      * @param user The who has broken the health factor, Thier _healthFactor should be below MIN_HEALTH_FACTOR
      * @param debtToCover The amount of MOK you want to burn to improve the users health factor
      * @notice You can partially liquidate a user
-     * @notice You will get a liquidation bonus taking the user funds
+     * @notice You will get a liquidation bonus taking the user funds 
+     * @notice: This function working assumes that the protocol will be roughly 150% overcollateralized in order for this to work.
+     * @notice: A known bug would be if the protocol was only 100% collateralized, we wouldn't be able to liquidate anyone.
+     * For example, if the price of the collateral plummeted before anyone could be liquidated.
+     * Follows CEI : Check, Effects, Interactions
     */
-    function liquidate(address collateral, address uesr, uint256 debtToCover) external {}
+    function liquidate(address collateral, address user, uint256 debtToCover) external moreThanZero(debtToCover) nonReentrant
+    {
+        //need to check health factor of the user
+        uint256 startingUserHealthFactor = _healthFactor(user);
+        if(startingUserHealthFactor >= _MIN_HEALTH_FACTOR){
+            revert MOKEngine__HealthFactorOk();
+        }
 
+        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsd(collateral, debtToCover);
+
+        uint256 bonusCollateral = (tokenAmountFromDebtCovered * _LIQUIDATION_BONUS) / _LIQUIDATION_PRECISION;
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered + bonusCollateral;
+        _redeemCollateral(collateral, totalCollateralToRedeem, user, msg.sender);
+        _burnMok(debtToCover, user, msg.sender);
+
+
+        uint256 endingUserHealthFactor = _healthFactor(user);
+        if(endingUserHealthFactor <= startingUserHealthFactor){
+            revert MOKEngine__HealthFactorImporved();
+        }
+    }
     function getHealthFactor() external view {}
 
     //////////////////////////////////
     // Private & Internal Functions //
     //////////////////////////////////
 
+
+    /*
+     * @dev Low-level internal function, do not call unless the function calling it is checking for health factors being broken
+     */
+    function _burnMok(uint256 amountMokToBurn, address onBehalfOf, address mokFrom) private{
+        _mokMinted[onBehalfOf] -= amountMokToBurn;
+        bool success = _iMok.transferFrom(mokFrom, address(this), amountMokToBurn);
+        if (!success){
+            revert MOKEngine__TransferFailed();
+        }
+        _iMok.burn(amountMokToBurn);
+    }
+    function _redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral, address from, address to) private 
+    {
+        _collateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(from, to, tokenCollateralAddress, amountCollateral);
+        bool success = IERC20(tokenCollateralAddress).transfer(to, amountCollateral);
+        if(!success){
+            revert MOKEngine__TransferFailed();
+        }
+    }
     function _getAccountInformation(
         address user
     )
@@ -286,7 +326,7 @@ contract MOKEngine is ReentrancyGuard
         return (collateralAdjustThreshold * _PRECISION) / totalMokMinted;
     }
 
-    function _revertItHealthFactorisBroken(address user) internal view {
+    function _revertIfHealthFactorIsBroken(address user) internal view {
         // 1.Check health factor
         // 2.Revert if they don't
 
@@ -299,6 +339,13 @@ contract MOKEngine is ReentrancyGuard
     //////////////////////////////////////
     // Public & External View Functions //
     //////////////////////////////////////
+
+    function getTokenAmountFromUsd(address token, uint256 usdAmountInWei) public view returns(uint256)
+    {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(_priceFeeds[token]);
+        (,int256 price,,,) = priceFeed.latestRoundData();
+        return (usdAmountInWei * _PRECISION) / (uint256(price) * _ADDITIONAL_FEED_PRECISION);
+    }
     function getAccountCollateralValue(
         address user
     ) public view returns (uint256 totalCollateralValueInUsd) {
