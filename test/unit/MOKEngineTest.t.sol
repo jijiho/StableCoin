@@ -19,17 +19,35 @@ contract MOKEngineTest is Test{
 
     address _ethUsdPriceFeed;
     address _weth;
-    address public USER = makeAddr("user");
+    address _btcUsdPriceFeed;
+    address public testUser = makeAddr("user");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
     function setUp() public {
         _deployer = new DeployMOK();
         (_mok, _moke, _config) = _deployer.run();
-        (_ethUsdPriceFeed, ,_weth, ,) = _config.activeNetworkConfig();
+        (_ethUsdPriceFeed, _btcUsdPriceFeed,_weth, ,) = _config.activeNetworkConfig();
 
-        ERC20Mock(_weth).mint(USER, STARTING_ERC20_BALANCE);
+        ERC20Mock(_weth).mint(testUser, STARTING_ERC20_BALANCE);
     }
     
+    ////////////////////
+    //constructor test//
+    ////////////////////
+
+    address[] public tokenAddress;
+    address[] public priceFeedAddresses;
+    function testRevertsIfTokenLengthDoesntMatchPriceFeeds() public {
+        tokenAddress.push(_weth);
+        priceFeedAddresses.push(_ethUsdPriceFeed);
+        priceFeedAddresses.push(_btcUsdPriceFeed);
+
+        vm.expectRevert(MOKEngine.MOKEngine__TokenAddressAndPriceFeedAddressMustBeSameLength.selector);
+        new MOKEngine(tokenAddress, priceFeedAddresses, address(_mok));
+    }
+
+
+
     //////////////
     //price test//
     //////////////
@@ -42,17 +60,31 @@ contract MOKEngineTest is Test{
 
         assertEq(actualUsd, expectedUsd);
     }
-
+    function testGetTokenAmountFromUsd() public {
+        uint256 usdAmount = 100 ether;
+        uint256 expectedWeth = 0.05 ether;
+        uint256 actualWeth = _moke.getTokenAmountFromUsd(_weth, usdAmount);
+        assertEq(expectedWeth, actualWeth);
+    }
     //////////////////////////////
     // depositCollateral Tests  //
     //////////////////////////////
 
-    function testRevertIfCollateralZero() public {
-        vm.startPrank(USER);
+    function testRevertsIfCollateralZero() public {
+        vm.startPrank(testUser);
         ERC20Mock (_weth).approve(address(_moke), AMOUNT_COLLATERAL);
 
         vm.expectRevert(MOKEngine.MOKEngine__NeedsMoreThanZero.selector);
         _moke.depositCollateral(_weth,0);
         vm.stopPrank();
     }
+
+    function testRevertsWithUnapprovdCollateral() public {
+        ERC20Mock ranToken = new ERC20Mock("RAN", "RAN", testUser, AMOUNT_COLLATERAL);
+        vm.startPrank(testUser);
+        vm.expectRevert(MOKEngine.MOKEngine__NotAllowedToken.selector);
+        _moke.depositCollateral(address(ranToken), AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
 }
