@@ -71,11 +71,12 @@ contract MOKEngine is ReentrancyGuard
     //  State Variable  //
     //////////////////////
     uint256 private constant _ADDITIONAL_FEED_PRECISION = 1e10;
-    uint256 private constant _PRECISION = 1e10;
+    uint256 private constant _PRECISION = 1e18;
     uint256 private constant _LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant _LIQUIDATION_PRECISION = 100;
     uint256 private constant _MIN_HEALTH_FACTOR = 1e18; 
     uint256 private constant _LIQUIDATION_BONUS = 10; //10% bonus
+    uint256 private constant _FEED_PRECISION = 1e8;
 
     mapping(address token => address priceFeed) private _priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount))
@@ -345,7 +346,7 @@ contract MOKEngine is ReentrancyGuard
     {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(_priceFeeds[token]);
         (,int256 price,,,) = priceFeed.latestRoundData();
-        return (usdAmountInWei * _PRECISION) / (uint256(price) * _ADDITIONAL_FEED_PRECISION);
+        return ((usdAmountInWei * _PRECISION) / (uint256(price) * _ADDITIONAL_FEED_PRECISION));
     }
     function getAccountCollateralValue(
         address user

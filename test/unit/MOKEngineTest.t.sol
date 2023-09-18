@@ -51,19 +51,20 @@ contract MOKEngineTest is Test{
     //////////////
     //price test//
     //////////////
+
+    
     function testGetUsdValue() public {
         uint256 ethAmount = 15e18;
-
-        uint256 expectedUsd = 30000e18;
+        uint256 expectedUsd = 15000e18;
         uint256 actualUsd = _moke.getUsdValue(_weth, ethAmount);
 
 
         assertEq(actualUsd, expectedUsd);
     }
+    
     function testGetTokenAmountFromUsd() public {
-        uint256 usdAmount = 100 ether;
-        uint256 expectedWeth = 0.05 ether;
-        uint256 actualWeth = _moke.getTokenAmountFromUsd(_weth, usdAmount);
+        uint256 expectedWeth = 0.1 ether;
+        uint256 actualWeth = _moke.getTokenAmountFromUsd(_weth, 100 ether); 
         assertEq(expectedWeth, actualWeth);
     }
     //////////////////////////////
