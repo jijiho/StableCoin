@@ -87,4 +87,18 @@ contract MOKEngineTest is Test{
         vm.stopPrank();
     }
 
+    modifier depositedCollateral() {
+        vm.startPrank(testUser);
+        ERC20Mock(_weth).approve(address(_moke), AMOUNT_COLLATERAL);
+        _moke.depositCollateral(_weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+        _;
+    }
+    function testCanDepositedCollateralAndGetAccountInfo() public depositedCollateral {
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = _moke.getAccountInformation(testUser);
+        uint256 expectedDepositedAmount = _moke.getTokenAmountFromUsd(_weth, collateralValueInUsd);
+        assertEq(totalDscMinted, 0);
+        assertEq(expectedDepositedAmount, AMOUNT_COLLATERAL);
+    }
+
 }

@@ -369,4 +369,13 @@ contract MOKEngine is ReentrancyGuard
         return
             (uint256(price) * _ADDITIONAL_FEED_PRECISION * amount) / _PRECISION;
     }
+
+     function getAccountInformation(address user)
+        external
+        view
+        returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
+    {
+        return _getAccountInformation(user);
+    }
+
 }
